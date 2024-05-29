@@ -1,19 +1,13 @@
 import pandas as pd
-from BinaryTree import CARTNode
 
 
 class GiniImpurity:
-    def __init__(self, data: pd.DataFrame, max_foreign_class_instances: int):
-        """
-        @param data: Dataframe containing the data that the gini impurities are to be calculated for
-        @param max_foreign_class_instances: the maximum number of class instances of the non-dominant class of each
-        data_chunk
-        """
+    def __init__(self, data: pd.DataFrame, min_class_instances):
         self.data = data
-        self.data_chunks = []
-        self.max_foreign_class_instances = max_foreign_class_instances
+        self.data_chunks = {}
+        self.min_class_instances = min_class_instances
 
-    def determine_potential_cutting_points(self) -> dict:
+    def determine_cutting_points(self) -> dict:
         """
         Calculates the possible cutting points for all attributes by taking the unique values for each attribute,
         sorting them in ascending order, calculating the average of neighboring values, and adding the average values
@@ -26,34 +20,20 @@ class GiniImpurity:
         for attribute in range(num_attributes):
             sorted_data = self.data.sort_values(by=self.data.columns[attribute])
             gini_points[attribute] = []
-            # For every attribute we add the attribute index as a key to the dictionary pointing to an empty list
             for index, row in sorted_data.iloc[:, attribute:attribute+1].iterrows():
                 gini_points[attribute].append(row.iloc[0])
-                # Here we are adding every data point for that attribute
             gini_points[attribute] = list(dict.fromkeys(gini_points[attribute]))
-            # This returns only unique values for that attribute to avoid duplicates
         for key, values in gini_points.items():
             cutting_points = []
             for attribute in range(len(values)):
                 if attribute == len(values) - 1:
                     continue
                 cutting_points.append((values[attribute] + values[attribute + 1]) / 2)
-                # For each attribute in or gini_points dictionary, we calculate the median between each attribute and
-                # its neighbour. Those are our potential cutting points.
             gini_points[key] = cutting_points
         return gini_points
 
-    def calculate_gini_for_each_cutting_point(self, subdata: pd.DataFrame) -> dict:
-        """
-        For each attribute all potential cutting points are determined and the data is split in two along those points.
-        For each of the split subsets, the individual gini value is calculated and used to calculate the gini impurity
-        between the two subsets. The gini impurity is added to a dictionary containing each gini value for each
-        cutting point for that specific attribute. That dictionary is added to another dictionary containing the gini
-        values for each attribute.
-        @param sub subdata: Dataframe containing the data to be split
-        @return: gini_values: dict containing a dict of gini values for each potential cutting point for each attribute
-        """
-        cutting_points_dict = self.determine_potential_cutting_points()
+    def calculate_gini_for_each_cutting_point(self, subdata):
+        cutting_points_dict = self.determine_cutting_points()
         gini_values = {}
 
         for attribute, cutting_points in cutting_points_dict.items():
@@ -101,18 +81,8 @@ class GiniImpurity:
         return gini
 
     def determine_smallest_gini(self, subdata):
-        """
-        Determines the minimun gini value and the corresponding attribute and cutting point for the data passed as an
-        argument
-        @param subdata: the dataset for which the smallest gini and corresponding attribute and cutting point are to be
-        determined
-        @return:
-        min_gini: lowest gini value of the dataset
-        min_attribute: attribute for which the lowest gini was calculated
-        min_cutting_point: cutting point, where the gini value is lowest
-        """
         ginis = self.calculate_gini_for_each_cutting_point(subdata)
-        min_gini = float('inf')
+        min_gini = 1
         min_attribute = None
         min_cutting_point = None
         for attribute, cutting_point in ginis.items():
@@ -121,66 +91,51 @@ class GiniImpurity:
                     min_gini = value
                     min_attribute = attribute
                     min_cutting_point = point
-
+                else:
+                    continue
         print(f"Min Gini of {min_gini} found in attribute {min_attribute} at cutting point {min_cutting_point}")
         return min_gini, min_attribute, min_cutting_point
 
-    def split_data_recursive(self, df, previous_cutting_point=0, previous_cutting_attribute=None, parent=None):
+    def split_data_recursive(self, df, parent_key='root'):
+        if len(df) <= 3:
+            self.data_chunks[parent_key] = {'data': df, 'gini_value': None, 'attribute': None, 'cutting_point': None}
+            return
+
         gini_value, attribute, cutting_point = self.determine_smallest_gini(df)
-        base_node = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
-                             previous_attribute=previous_cutting_attribute, attribute=attribute, gini=gini_value,
-                             data=df, parent=parent)
 
-        self.data_chunks.append(base_node)
-        # Check if the dataset is small or if all attributes in the specified column are equal
-        if len(df) <= 3 or ((df.iloc[:, attribute] == df.iloc[0, attribute]).all() or gini_value == 0.5):
-            return base_node
+        left_split = df[df.iloc[:, attribute] < cutting_point]
+        right_split = df[df.iloc[:, attribute] >= cutting_point]
 
-        left_split = df[df.iloc[:, attribute] <= cutting_point]
-        right_split = df[df.iloc[:, attribute] > cutting_point]
+        if left_split.empty or right_split.empty:
+            print("Empty split detected. Ending split.")
+            self.data_chunks[parent_key] = {'data': df, 'gini_value': None, 'attribute': None, 'cutting_point': None}
+            return
 
-        if not left_split.empty and self.needs_further_splitting(left_split):
-            base_node.left = self.split_data_recursive(left_split, previous_cutting_point=cutting_point,
-                                                       previous_cutting_attribute=attribute, parent=base_node)
+        left_key = f"{parent_key}_left"
+        right_key = f"{parent_key}_right"
+
+        if self.needs_further_splitting(left_split):
+            self.split_data_recursive(left_split, left_key)
         else:
-            previous_cutting_point = left_split.iloc[:, attribute].max()
-            base_node.left = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
-                                      attribute=attribute, previous_attribute=previous_cutting_attribute, gini=None,
-                                      data=left_split, parent=base_node)
-            self.data_chunks.append(base_node.left)
+            self.data_chunks[left_key] = {'data': left_split, 'gini_value': gini_value, 'attribute': attribute,
+                                          'cutting_point': cutting_point}
 
-        if not right_split.empty and self.needs_further_splitting(right_split):
-            base_node.right = self.split_data_recursive(right_split, previous_cutting_point=cutting_point,
-                                                        previous_cutting_attribute=attribute, parent=base_node)
+        if self.needs_further_splitting(right_split):
+            self.split_data_recursive(right_split, right_key)
         else:
-            previous_cutting_point = right_split.iloc[:, attribute].min()
-            base_node.right = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
-                                       attribute=attribute, previous_attribute=previous_cutting_attribute, gini=None,
-                                       data=right_split, parent=base_node)
-            self.data_chunks.append(base_node.right)
+            self.data_chunks[right_key] = {'data': right_split, 'gini_value': gini_value, 'attribute': attribute,
+                                           'cutting_point': cutting_point}
 
-        return base_node
-
-    def needs_further_splitting(self, df: pd.DataFrame) -> bool:
-        """
-        Determines if a dataframe needs to be split further based on the max_foreign_class_instances attribute
-        @param df: the dataset to be checked
-        @return: boolean value
-        """
-
+    def needs_further_splitting(self, df):
         class_column = "class" if "class" in df.columns else df.columns[-1]
         class_counts = df[class_column].value_counts()
         dominant_class = class_counts.idxmax()
 
         non_dominant_instances = class_counts.sum() - class_counts[dominant_class]
         # Todo - This might not be correct. The total number of class instances that are not part of the non dominant
-        return non_dominant_instances > self.max_foreign_class_instances
+        return non_dominant_instances > self.min_class_instances
 
     def split_data_along_cutting_point(self):
-        """
-        Function calling recursive function to split data along cutting points
-        @return: None
-        """
         self.split_data_recursive(self.data)
 
 
@@ -188,9 +143,15 @@ if __name__ == "__main__":
     data = pd.read_csv(
         "/home/philipp/Documents/semester_6/maschinelles_lernen/uebungen/uebung_3/iris.data",
         header=None)
-    gini = GiniImpurity(data, 1)
+    gini = GiniImpurity(data, 4)
     ginis = gini.calculate_gini_for_each_cutting_point(gini.data)
     gini.split_data_along_cutting_point()
-    for chunk in gini.data_chunks:
-        print(chunk)
+    for chunk in gini.data_chunks.keys():
+        class_column = "class" if "class" in gini.data_chunks[chunk]['data'].columns else \
+        gini.data_chunks[chunk]['data'].columns[-1]
+        class_counts = gini.data_chunks[chunk]['data'][class_column].value_counts()
+        dominant_class_count = class_counts.max()
+        remaining_class_count = class_counts.sum() - dominant_class_count
+        print(chunk, len(gini.data_chunks[chunk]['data']), "Dominant Class Count:", dominant_class_count,
+              "Remaining Class Count:", remaining_class_count)
     print(len(gini.data_chunks))
