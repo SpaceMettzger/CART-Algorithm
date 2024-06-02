@@ -102,7 +102,7 @@ class GiniImpurity:
 
     def determine_smallest_gini(self, subdata):
         """
-        Determines the minimun gini value and the corresponding attribute and cutting point for the data passed as an
+        Determines the minimum gini value and the corresponding attribute and cutting point for the data passed as an
         argument
         @param subdata: the dataset for which the smallest gini and corresponding attribute and cutting point are to be
         determined
@@ -185,12 +185,11 @@ class GiniImpurity:
 
 
 if __name__ == "__main__":
-    data = pd.read_csv(
+    dataset = pd.read_csv(
         "/home/philipp/Documents/semester_6/maschinelles_lernen/uebungen/uebung_3/iris.data",
         header=None)
-    gini = GiniImpurity(data, 1)
-    ginis = gini.calculate_gini_for_each_cutting_point(gini.data)
-    gini.split_data_along_cutting_point()
-    for chunk in gini.data_chunks:
+    cart_class = GiniImpurity(dataset, 1)
+    cart_class.split_data_along_cutting_point()
+    for chunk in cart_class.data_chunks:
         print(chunk)
-    print(len(gini.data_chunks))
+    print(len(cart_class.data_chunks))

@@ -46,7 +46,8 @@ class BinaryTree:
 
     def add(self, node):
         """
-        Adds a root node if no root node exists. Otherwise, it calls the _add() function to add a node at the correct position.
+        Adds a root node if no root node exists. Otherwise, it calls the _add() function to add a node at the correct
+        position.
         @param node: The node to be added.
         @return: None
         """
@@ -59,10 +60,12 @@ class BinaryTree:
             if split_point <= parent_node.cutting_point:
                 if parent_node.left is not None:
                     parent_node.left = node
-                    print(f"Node {node.Id} added left to node {node.parent.Id} (Cutting_point: {parent_node.cutting_point}, split_point {split_point})")
+                    print(f"Node {node.Id} added left to node {node.parent.Id} (Cutting_point: "
+                          f"{parent_node.cutting_point}, split_point {split_point})")
             else:
                 parent_node.right = node
-                print(f"Node {node.Id} added right to node {node.parent.Id} (Cutting_point: {parent_node.cutting_point}, split_point {split_point})")
+                print(f"Node {node.Id} added right to node {node.parent.Id} (Cutting_point: "
+                      f"{parent_node.cutting_point}, split_point {split_point})")
 
     def find(self, node_id):
         return self._find(node_id, self.root)
@@ -106,7 +109,6 @@ class BinaryTree:
                 current_node = current_node.right
         print(current_node.dominant_class)
         return current_node.dominant_class
-
 
     def print_tree(self, node, level=0):
         if node is not None:
