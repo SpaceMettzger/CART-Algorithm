@@ -3,7 +3,7 @@ from BinaryTree import CARTNode
 
 
 class GiniImpurity:
-    def __init__(self, data: pd.DataFrame, max_foreign_class_instances: int):
+    def __init__(self, data: pd.DataFrame, min_leaf_size: int, min_gini_decrease: float):
         """
         @param data: Dataframe containing the data that the gini impurities are to be calculated for
         @param max_foreign_class_instances: the maximum number of class instances of the non-dominant class of each
@@ -11,7 +11,8 @@ class GiniImpurity:
         """
         self.data = data
         self.data_chunks = []
-        self.max_foreign_class_instances = max_foreign_class_instances
+        self.min_leaf_size = min_leaf_size
+        self.min_gini_decrease = min_gini_decrease
 
     def determine_potential_cutting_points(self) -> dict:
         """
@@ -87,7 +88,7 @@ class GiniImpurity:
         @return: gini: float value of the Gini impurity
         """
         if subset.empty:
-            return 0.0
+            return 1.0
 
         class_column = "class" if "class" in subset.columns else subset.columns[-1]
 
@@ -126,6 +127,8 @@ class GiniImpurity:
         return min_gini, min_attribute, min_cutting_point
 
     def split_data_recursive(self, df, previous_cutting_point=0, previous_cutting_attribute=None, parent=None):
+        if df.shape[0] < 3:
+            return
         gini_value, attribute, cutting_point = self.determine_smallest_gini(df)
         base_node = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
                              previous_attribute=previous_cutting_attribute, attribute=attribute, gini=gini_value,
@@ -133,48 +136,36 @@ class GiniImpurity:
 
         self.data_chunks.append(base_node)
         # Check if the dataset is small or if all attributes in the specified column are equal
-        if len(df) <= 3 or ((df.iloc[:, attribute] == df.iloc[0, attribute]).all() or gini_value == 0.5):
+        if df.shape[0] < (self.min_leaf_size * 2) or gini_value < self.min_gini_decrease:
             return base_node
 
         left_split = df[df.iloc[:, attribute] <= cutting_point]
         right_split = df[df.iloc[:, attribute] > cutting_point]
 
-        if not left_split.empty and self.needs_further_splitting(left_split):
+        if left_split.shape[0] < self.min_leaf_size or left_split.shape[0] < self.min_leaf_size:
+            return
+
+        if not left_split.empty and self.needs_further_splitting(left_split, gini_value):
             base_node.left = self.split_data_recursive(left_split, previous_cutting_point=cutting_point,
                                                        previous_cutting_attribute=attribute, parent=base_node)
         else:
-            previous_cutting_point = left_split.iloc[:, attribute].max()
-            base_node.left = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
-                                      attribute=attribute, previous_attribute=previous_cutting_attribute, gini=None,
-                                      data=left_split, parent=base_node)
-            self.data_chunks.append(base_node.left)
+            return base_node
 
-        if not right_split.empty and self.needs_further_splitting(right_split):
+        if not right_split.empty and self.needs_further_splitting(right_split, gini_value):
             base_node.right = self.split_data_recursive(right_split, previous_cutting_point=cutting_point,
                                                         previous_cutting_attribute=attribute, parent=base_node)
         else:
-            previous_cutting_point = right_split.iloc[:, attribute].min()
-            base_node.right = CARTNode(cutting_point=cutting_point, split_point=previous_cutting_point,
-                                       attribute=attribute, previous_attribute=previous_cutting_attribute, gini=None,
-                                       data=right_split, parent=base_node)
-            self.data_chunks.append(base_node.right)
+            return base_node
 
         return base_node
 
-    def needs_further_splitting(self, df: pd.DataFrame) -> bool:
+    def needs_further_splitting(self, df: pd.DataFrame, gini_value: float) -> bool:
         """
         Determines if a dataframe needs to be split further based on the max_foreign_class_instances attribute
         @param df: the dataset to be checked
         @return: boolean value
         """
-
-        class_column = "class" if "class" in df.columns else df.columns[-1]
-        class_counts = df[class_column].value_counts()
-        dominant_class = class_counts.idxmax()
-
-        non_dominant_instances = class_counts.sum() - class_counts[dominant_class]
-        # Todo - This might not be correct. The total number of class instances that are not part of the non dominant
-        return non_dominant_instances > self.max_foreign_class_instances
+        return df.shape[0] >= (self.min_leaf_size * 2) or self.min_gini_decrease < gini_value
 
     def split_data_along_cutting_point(self):
         """
@@ -188,7 +179,7 @@ if __name__ == "__main__":
     dataset = pd.read_csv(
         "/home/philipp/Documents/semester_6/maschinelles_lernen/uebungen/uebung_3/iris.data",
         header=None)
-    cart_class = GiniImpurity(dataset, 1)
+    cart_class = GiniImpurity(dataset, 3, 0.05)
     cart_class.split_data_along_cutting_point()
     for chunk in cart_class.data_chunks:
         print(chunk)

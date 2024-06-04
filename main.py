@@ -12,12 +12,12 @@ if __name__ == "__main__":
         data = data.drop(columns=[0, 1])
         data.columns = range(len(data.columns))
 
-    gini = GiniImpurity(data, 1)
+    gini = GiniImpurity(data, 3, 0.05)
     gini.split_data_along_cutting_point()
     data = gini.data_chunks
     tree.fill_tree(data)
 
-    print("Ausgabe Baum:")
+    print("\nAusgabe Baum:")
     print("=============================================")
     tree.print_tree(tree.root)
     print("=============================================")

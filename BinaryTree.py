@@ -37,7 +37,7 @@ class CARTNode:
         return (f"Node: {self.Id}, Parent_Node: {parent_id}. Split_point: {self.cutting_point}, "
                 f"Split_column: {self.cutting_axis}, Previous_split_point: {self.split_point}, "
                 f"Previous_split_column: {self.previous_cutting_axis}, "
-                f"Size: {len(self.data)}/{parent_len}")
+                f", Gini: {self.gini_value}, Size: {len(self.data)}/{parent_len}")
 
 
 class BinaryTree:
